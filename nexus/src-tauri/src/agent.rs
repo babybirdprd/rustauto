@@ -43,10 +43,13 @@ struct ScrollArgs {
 #[derive(Deserialize, JsonSchema)]
 struct MemorizeArgs {
     note: String,
+    tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
-struct RecallArgs {}
+struct RecallArgs {
+    query: Option<String>,
+}
 
 fn emit_event(event_type: &str, message: String) {
     if let Some(app) = GLOBAL_APP.get() {
@@ -211,20 +214,25 @@ async fn memorize(args: MemorizeArgs) -> ToolResult {
 
     if let Some(mem_lock) = GLOBAL_MEMORY.get() {
         if let Ok(mut mem) = mem_lock.lock() {
-            mem.add(args.note.clone());
+            let tags = args.tags.unwrap_or_default();
+            mem.add(args.note.clone(), tags.clone());
             emit_event("tool_result", "Note memorized.".to_string());
-            return ToolResult::success(json!({ "status": "memorized", "note": args.note }));
+            return ToolResult::success(json!({ "status": "memorized", "note": args.note, "tags": tags }));
         }
     }
     ToolResult::error("Failed to access memory".to_string())
 }
 
-#[tool(description = "Recall all memorized notes.")]
-async fn recall(_args: RecallArgs) -> ToolResult {
-    emit_event("tool_call", "Recalling memories".to_string());
+#[tool(description = "Recall memorized notes. Optionally filter by a query string.")]
+async fn recall(args: RecallArgs) -> ToolResult {
+    emit_event("tool_call", format!("Recalling memories. Query: {:?}", args.query));
      if let Some(mem_lock) = GLOBAL_MEMORY.get() {
         if let Ok(mem) = mem_lock.lock() {
-            let notes = mem.get_all();
+             let notes = if let Some(q) = args.query {
+                mem.search(&q)
+            } else {
+                mem.get_all()
+            };
             emit_event("tool_result", format!("Recalled {} notes", notes.len()));
             return ToolResult::success(json!({ "notes": notes }));
         }
@@ -234,7 +242,14 @@ async fn recall(_args: RecallArgs) -> ToolResult {
 
 async fn run_worker<L: BaseLlm + 'static>(llm: L, prompt: String) -> Result<String, String> {
     let worker = LlmWorker::<String>::builder(llm)
-        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, search, and manage memory. Please explain your reasoning before taking actions using a <thinking> tag.")
+        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, search, and manage memory.
+
+CRITICAL INSTRUCTIONS:
+1. Explain your reasoning before taking actions using a <thinking> tag.
+2. If a tool fails, analyze the error and try a different approach (e.g., different selector, search query, or URL). Do not give up immediately.
+3. Use the `memorize` tool to save important information found during browsing.
+4. Use the `recall` tool to retrieve information if needed.
+")
         .with_tool(navigate)
         .with_tool(search)
         .with_tool(click)
