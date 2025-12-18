@@ -3,20 +3,13 @@ use radkit::models::providers::AnthropicLlm;
 use radkit::macros::tool;
 use radkit::tools::ToolResult;
 use schemars::JsonSchema;
-use serde::Deserialize; // Removed Serialize
+use serde::Deserialize;
 use serde_json::json;
 use crate::browser::GLOBAL_BROWSER;
 use crate::GLOBAL_APP;
 use html_to_markdown_rs::convert;
 use crate::search::search_content;
 use tauri::Emitter;
-// Removed async_trait::async_trait
-
-// Use serde_json::Value for output to avoid LlmDeserialize derive issues
-// #[derive(Debug, Serialize, Deserialize, JsonSchema)]
-// pub struct AgentOutput {
-//    pub answer: String,
-// }
 
 #[derive(Deserialize, JsonSchema)]
 struct NavigateArgs {
@@ -29,6 +22,22 @@ struct SearchArgs {
     url: Option<String>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+struct ClickArgs {
+    selector: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct TypeArgs {
+    text: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct ScrollArgs {
+    direction: String, // "up" or "down"
+    amount: Option<i32>,
+}
+
 fn emit_event(event_type: &str, message: String) {
     if let Some(app) = GLOBAL_APP.get() {
         let _ = app.emit("agent-event", json!({
@@ -36,6 +45,16 @@ fn emit_event(event_type: &str, message: String) {
             "message": message,
             "timestamp": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
         }));
+    }
+}
+
+fn process_content(html: String) -> String {
+    let md = convert(&html, None).unwrap_or_else(|e| format!("Conversion failed: {}", e));
+    let truncated: String = md.chars().take(10000).collect();
+    if truncated.len() < md.len() {
+        format!("{}... (truncated)", truncated)
+    } else {
+        md
     }
 }
 
@@ -50,16 +69,11 @@ async fn navigate(args: NavigateArgs) -> ToolResult {
 
     match browser.navigate_and_get_content(&args.url).await {
         Ok(html) => {
-            let md = convert(&html, None).unwrap_or_else(|e| format!("Conversion failed: {}", e));
-            let snippet = if md.len() > 10000 {
-                format!("{}... (truncated)", &md[..10000])
-            } else {
-                md
-            };
-            emit_event("tool_result", format!("Navigated to {}. Content length: {}", args.url, snippet.len()));
+            let content = process_content(html);
+            emit_event("tool_result", format!("Navigated to {}. Content length: {}", args.url, content.len()));
             ToolResult::success(json!({
                 "url": args.url,
-                "content": snippet
+                "content": content
             }))
         },
         Err(e) => {
@@ -101,6 +115,78 @@ async fn search(args: SearchArgs) -> ToolResult {
     }
 }
 
+#[tool(description = "Click an element by CSS selector and return updated content")]
+async fn click(args: ClickArgs) -> ToolResult {
+    emit_event("tool_call", format!("Clicking '{}'", args.selector));
+
+    let browser = match GLOBAL_BROWSER.get() {
+        Some(b) => b,
+        None => return ToolResult::error("Browser not initialized"),
+    };
+
+    match browser.click_element(&args.selector).await {
+        Ok(html) => {
+            let content = process_content(html);
+            emit_event("tool_result", format!("Clicked '{}'. Content length: {}", args.selector, content.len()));
+            ToolResult::success(json!({
+                "content": content
+            }))
+        },
+        Err(e) => {
+            emit_event("error", format!("Failed to click: {}", e));
+            ToolResult::error(e.to_string())
+        }
+    }
+}
+
+#[tool(description = "Type text into the focused element")]
+async fn type_input(args: TypeArgs) -> ToolResult {
+    emit_event("tool_call", format!("Typing '{}'", args.text));
+
+    let browser = match GLOBAL_BROWSER.get() {
+        Some(b) => b,
+        None => return ToolResult::error("Browser not initialized"),
+    };
+
+    match browser.type_text(&args.text).await {
+        Ok(html) => {
+            let content = process_content(html);
+            emit_event("tool_result", format!("Typed text. Content length: {}", content.len()));
+            ToolResult::success(json!({
+                "content": content
+            }))
+        },
+        Err(e) => {
+            emit_event("error", format!("Failed to type: {}", e));
+            ToolResult::error(e.to_string())
+        }
+    }
+}
+
+#[tool(description = "Scroll the page up or down")]
+async fn scroll(args: ScrollArgs) -> ToolResult {
+    emit_event("tool_call", format!("Scrolling {}", args.direction));
+
+    let browser = match GLOBAL_BROWSER.get() {
+        Some(b) => b,
+        None => return ToolResult::error("Browser not initialized"),
+    };
+
+    match browser.scroll_page(&args.direction, args.amount).await {
+        Ok(html) => {
+             let content = process_content(html);
+             emit_event("tool_result", format!("Scrolled {}. Content length: {}", args.direction, content.len()));
+             ToolResult::success(json!({
+                "content": content
+            }))
+        },
+        Err(e) => {
+            emit_event("error", format!("Failed to scroll: {}", e));
+            ToolResult::error(e.to_string())
+        }
+    }
+}
+
 pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
     emit_event("system", format!("Agent started with prompt: {}", prompt));
 
@@ -116,9 +202,12 @@ pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
     };
 
     let worker = LlmWorker::<String>::builder(llm)
-        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web and search for information.")
+        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, and search. Please explain your reasoning before taking actions using a <thinking> tag.")
         .with_tool(navigate)
         .with_tool(search)
+        .with_tool(click)
+        .with_tool(type_input)
+        .with_tool(scroll)
         .build();
 
     match worker.run(&prompt).await {
