@@ -30,3 +30,8 @@ grep = "0.3"
 anyhow = "1"
 thiserror = "1"
 futures = "0.3"
+html-to-markdown-rs = "2.11"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+tryparse = { version = "0.4", features = ["derive"] }
+async-trait = "0.1"

@@ -12,29 +12,47 @@
     - Implemented `chromiumoxide` background process (`browser.rs`).
     - Implemented Basic "Fetch and Search" command (`fetch_and_search`).
     - Added `radkit` and other dependencies to `Cargo.toml`.
+- **Phase 2: The Sifter (Intelligence)**
+    - Integrated `html-to-markdown-rs` to convert fetched HTML to Markdown.
+    - Connected `radkit` to implement the "Reason + Act" loop (using `LlmWorker`).
+    - Implemented `agent.rs` with `navigate` and `search` tools.
+    - Built "Thought Stream" UI (`ThoughtStream.tsx`) to display agent events in real-time.
 
 ## Instructions for Next Agent
-Your goal is to start Phase 2 of the Roadmap: The Sifter (Intelligence).
+Your goal is to refine the agent's capabilities and robustness, and start Phase 3 (The Weaver).
 
 ### Tasks
-1. **Integrate `html-to-markdown-rs`:**
-   - Add the dependency.
-   - Convert fetched HTML content to Markdown before processing/searching to reduce tokens.
+1. **Refine Agent Loop:**
+   - Improve error handling in tool calls.
+   - Implement "Thought" logging if possible (e.g. prompt LLM to output reasoning explicitly).
+   - Add more tools (e.g. `click`, `type`, `scroll`).
 
-2. **Connect `radkit`:**
-   - Initialize `radkit` with an LLM provider (e.g., Anthropic or OpenAI).
-   - Implement the "Reason + Act" loop using `radkit`.
-   - Create a simple agent that can decide to search or navigate based on user input.
+2. **Phase 3: The Weaver (Synthesis)**
+   - Implement the ability for the agent to synthesize information from multiple pages.
+   - Create a "Memory" system to store findings across navigations.
 
-3. **Build "Thought Stream" UI:**
-   - Create a frontend component to display the agent's reasoning logs (Events).
-   - Connect backend events to the frontend.
+## Robust Testing Strategy Plan
 
-### Radkit Integration
-**Important:** Use `radkit` for all agentic logic.
-- Reference `radkit_docs/` for implementation details.
-- See `radkit_docs/core-concepts` for Thread, Event, and Content models.
-- Use `radkit`'s `LlmWorker` or `LlmFunction` to implement the agent loop.
+### 1. Unit Testing (Rust Backend)
+- **Tool Logic:** Test `navigate` and `search` tools in isolation by mocking the `BrowserManager`. Since `BrowserManager` is hard to mock (struct), refactor tools to accept a trait `BrowserInterface` and mock that.
+- **Agent Loop:** Test `run_agent_loop` with a mock LLM provider. Create a `MockLlm` that implements `radkit`'s `Llm` trait (if public) or wrapper, to simulate LLM responses without network calls.
+- **Search:** Continue testing `search_content` (already exists).
+
+### 2. Integration Testing (Backend)
+- **Browser Automation:** Use a local test server (e.g. `mockito` or simple `warp` server) to serve static HTML pages. Point `BrowserManager` to these local pages to verify navigation and content extraction/conversion (HTML -> MD) works correctly.
+- **Radkit Integration:** Verify `LlmWorker` constructs requests correctly (serialization tests).
+
+### 3. Frontend Testing
+- **Component Tests:** Use `Vitest` + `React Testing Library` to test `ThoughtStream` component rendering and event handling. Mock `@tauri-apps/api/event`.
+- **E2E Testing:** Use `Playwright` to test the full application flow.
+  - Launch the Tauri app (or web version).
+  - Simulate user input in the Omnibox.
+  - Verify "Thought Stream" updates (mocking the backend invoke if needed, or running full backend in dev mode).
+
+### 4. Agent Evaluation (Evals)
+- Create a dataset of "User Intents" vs "Expected Actions".
+  - Example: "Find the price of BTC" -> Expected: `navigate("google.com")`, `search("BTC price")`.
+- Run the agent against these prompts (mocking the web execution) to verify the *reasoning* capability (i.e. does it choose the right tools?).
 
 ## Documentation
 - **PRD:** See `PRD.md` for full requirements.
