@@ -15,21 +15,18 @@
 - **Phase 2: The Sifter (Intelligence)**
     - Integrated `html-to-markdown-rs` to convert fetched HTML to Markdown.
     - Connected `radkit` to implement the "Reason + Act" loop (using `LlmWorker`).
-    - Implemented `agent.rs` with `navigate` and `search` tools.
+    - Implemented `agent.rs` with `navigate`, `search`, `click`, `type`, and `scroll` tools.
     - Built "Thought Stream" UI (`ThoughtStream.tsx`) to display agent events in real-time.
+    - Refined `BrowserManager` to support stateful browsing (single active tab) and improved error handling.
 
 ## Instructions for Next Agent
-Your goal is to refine the agent's capabilities and robustness, and start Phase 3 (The Weaver).
+Your goal is to start Phase 3 (The Weaver). Focus on information synthesis and memory.
 
 ### Tasks
-1. **Refine Agent Loop:**
-   - Improve error handling in tool calls.
-   - Implement "Thought" logging if possible (e.g. prompt LLM to output reasoning explicitly).
-   - Add more tools (e.g. `click`, `type`, `scroll`).
-
-2. **Phase 3: The Weaver (Synthesis)**
+1. **Phase 3: The Weaver (Synthesis)**
    - Implement the ability for the agent to synthesize information from multiple pages.
-   - Create a "Memory" system to store findings across navigations.
+   - Create a "Memory" system to store findings across navigations (e.g. `Memory` struct or vector store).
+   - Consider implementing a `synthesize` tool that allows the agent to summarize collected information.
 
 ## Robust Testing Strategy Plan
 
