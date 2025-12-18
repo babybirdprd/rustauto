@@ -1,0 +1,7 @@
+dev_server.log
+dev_server_2.log
+verification/
+nexus/node_modules/
+nexus/src-tauri/target/
+radkit_docs/node_modules/
+.DS_Store
