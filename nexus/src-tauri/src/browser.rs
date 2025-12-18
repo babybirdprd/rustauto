@@ -2,6 +2,9 @@ use anyhow::Result;
 use chromiumoxide::{Browser, BrowserConfig};
 use futures::StreamExt;
 use std::sync::Arc;
+use std::sync::OnceLock;
+
+pub static GLOBAL_BROWSER: OnceLock<BrowserManager> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct BrowserManager {

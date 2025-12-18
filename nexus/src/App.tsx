@@ -1,6 +1,27 @@
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { ThoughtStream } from "./components/ThoughtStream";
 
 function App() {
+  const [prompt, setPrompt] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim()) return;
+
+    setLoading(true);
+    try {
+      await invoke("run_agent", { prompt });
+    } catch (err) {
+      console.error("Agent error:", err);
+      // Maybe add error to ThoughtStream manually if needed, but backend should emit error event too
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 font-mono">
       <div className="flex flex-col items-center justify-center space-y-8 mt-20">
@@ -8,20 +29,20 @@ function App() {
           Nexus
         </h1>
 
-        {/* Omnibox Placeholder */}
-        <div className="w-full max-w-2xl">
+        {/* Omnibox */}
+        <form onSubmit={handleSubmit} className="w-full max-w-2xl">
           <input
             type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
             placeholder="What is your goal?"
-            className="w-full bg-gray-800/50 backdrop-blur-md border border-gray-700 rounded-lg px-6 py-4 text-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xl"
+            disabled={loading}
+            className="w-full bg-gray-800/50 backdrop-blur-md border border-gray-700 rounded-lg px-6 py-4 text-xl focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xl disabled:opacity-50"
           />
-        </div>
+        </form>
 
-        {/* Thought Stream Placeholder */}
-        <div className="w-full max-w-2xl bg-black/30 rounded-lg p-4 h-48 overflow-y-auto border border-gray-800">
-          <p className="text-gray-400 text-sm">[System] Nexus initialized.</p>
-          <p className="text-blue-400 text-sm">[Sifter] Ready to scan.</p>
-        </div>
+        {/* Thought Stream */}
+        <ThoughtStream />
       </div>
     </div>
   );
