@@ -1,13 +1,11 @@
 use radkit::agent::LlmWorker;
-use radkit::models::providers::{AnthropicLlm, OpenAILlm, OpenRouterLlm};
-use radkit::models::BaseLlm;
+use radkit::models::providers::AnthropicLlm;
 use radkit::macros::tool;
 use radkit::tools::ToolResult;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
 use crate::browser::GLOBAL_BROWSER;
-use crate::memory::GLOBAL_MEMORY;
 use crate::GLOBAL_APP;
 use html_to_markdown_rs::convert;
 use crate::search::search_content;
@@ -39,14 +37,6 @@ struct ScrollArgs {
     direction: String, // "up" or "down"
     amount: Option<i32>,
 }
-
-#[derive(Deserialize, JsonSchema)]
-struct MemorizeArgs {
-    note: String,
-}
-
-#[derive(Deserialize, JsonSchema)]
-struct RecallArgs {}
 
 fn emit_event(event_type: &str, message: String) {
     if let Some(app) = GLOBAL_APP.get() {
@@ -108,15 +98,7 @@ async fn search(args: SearchArgs) -> ToolResult {
             Err(e) => return ToolResult::error(e.to_string()),
         }
     } else {
-        // If no URL is provided, we should ideally use the current page content.
-        // However, `search_content` works on string content.
-        // We'd need to fetch current page content from browser if it exposes it.
-        // For now, let's assume the agent uses `navigate` first or provides a URL.
-        // But wait, `navigate` returns content.
-        // If the agent wants to search *again* on the *same* page without reloading?
-        // The BrowserManager maintains state, but `navigate_and_get_content` navigates.
-        // Let's assume for this version URL is preferred or we error.
-        return ToolResult::error("URL is required for search in this version. Navigate first if needed.");
+        return ToolResult::error("URL is required for search in this version");
     };
 
     match search_content(&content, &args.query) {
@@ -205,43 +187,27 @@ async fn scroll(args: ScrollArgs) -> ToolResult {
     }
 }
 
-#[tool(description = "Store a note or finding in the agent's memory for later recall.")]
-async fn memorize(args: MemorizeArgs) -> ToolResult {
-    emit_event("tool_call", format!("Memorizing note: {}", args.note));
+pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
+    emit_event("system", format!("Agent started with prompt: {}", prompt));
 
-    if let Some(mem_lock) = GLOBAL_MEMORY.get() {
-        if let Ok(mut mem) = mem_lock.lock() {
-            mem.add(args.note.clone());
-            emit_event("tool_result", "Note memorized.".to_string());
-            return ToolResult::success(json!({ "status": "memorized", "note": args.note }));
-        }
+    let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
+    if api_key.is_empty() {
+         emit_event("error", "ANTHROPIC_API_KEY not found in environment".to_string());
+         return Err("ANTHROPIC_API_KEY not found in environment".to_string());
     }
-    ToolResult::error("Failed to access memory".to_string())
-}
 
-#[tool(description = "Recall all memorized notes.")]
-async fn recall(_args: RecallArgs) -> ToolResult {
-    emit_event("tool_call", "Recalling memories".to_string());
-     if let Some(mem_lock) = GLOBAL_MEMORY.get() {
-        if let Ok(mem) = mem_lock.lock() {
-            let notes = mem.get_all();
-            emit_event("tool_result", format!("Recalled {} notes", notes.len()));
-            return ToolResult::success(json!({ "notes": notes }));
-        }
-    }
-    ToolResult::error("Failed to access memory".to_string())
-}
+    let llm = match AnthropicLlm::from_env("claude-3-sonnet-20240229") {
+        Ok(l) => l,
+        Err(e) => return Err(e.to_string()),
+    };
 
-async fn run_worker<L: BaseLlm + 'static>(llm: L, prompt: String) -> Result<String, String> {
     let worker = LlmWorker::<String>::builder(llm)
-        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, search, and manage memory. Please explain your reasoning before taking actions using a <thinking> tag.")
+        .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, and search. Please explain your reasoning before taking actions using a <thinking> tag.")
         .with_tool(navigate)
         .with_tool(search)
         .with_tool(click)
         .with_tool(type_input)
         .with_tool(scroll)
-        .with_tool(memorize)
-        .with_tool(recall)
         .build();
 
     match worker.run(&prompt).await {
@@ -252,44 +218,6 @@ async fn run_worker<L: BaseLlm + 'static>(llm: L, prompt: String) -> Result<Stri
         Err(e) => {
              emit_event("error", format!("Agent execution failed: {}", e));
              Err(e.to_string())
-        }
-    }
-}
-
-pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
-    emit_event("system", format!("Agent started with prompt: {}", prompt));
-
-    let provider = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
-    // Default model depends on provider, but we'll let the user specify or fallback to a reasonable default if possible.
-    // However, `from_env` usually takes a model name.
-    let model = std::env::var("LLM_MODEL").ok();
-
-    match provider.to_lowercase().as_str() {
-        "anthropic" => {
-            let model_name = model.unwrap_or_else(|| "claude-3-sonnet-20240229".to_string());
-            emit_event("system", format!("Using Anthropic provider with model: {}", model_name));
-            let llm = AnthropicLlm::from_env(model_name).map_err(|e| e.to_string())?;
-            run_worker(llm, prompt).await
-        },
-        "openai" => {
-             let model_name = model.unwrap_or_else(|| "gpt-4o".to_string());
-             emit_event("system", format!("Using OpenAI provider with model: {}", model_name));
-             let llm = OpenAILlm::from_env(model_name).map_err(|e| e.to_string())?;
-             run_worker(llm, prompt).await
-        },
-        "openrouter" => {
-            let model_name = model.unwrap_or_else(|| "anthropic/claude-3.5-sonnet".to_string());
-            emit_event("system", format!("Using OpenRouter provider with model: {}", model_name));
-            let llm = OpenRouterLlm::from_env(model_name)
-                .map_err(|e| e.to_string())?
-                .with_site_url("https://nexus.local") // TODO: Configurable
-                .with_app_name("Nexus Agent");
-            run_worker(llm, prompt).await
-        },
-        _ => {
-            let msg = format!("Unsupported LLM_PROVIDER: {}", provider);
-            emit_event("error", msg.clone());
-            Err(msg)
         }
     }
 }
