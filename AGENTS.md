@@ -1,34 +1,40 @@
 # AGENTS.md
 
 ## Project Status
-**Current Phase:** Phase 1 (In Progress)
+**Current Phase:** Phase 2 (The Sifter/Intelligence)
 
 ### Completed
 - Initialized Tauri + React + TypeScript project in `nexus/`.
 - Configured Tailwind CSS v4.
 - Created `PRD.md` with project requirements.
 - Cloned `radkit` documentation to `radkit_docs/`.
+- **Phase 1: The Skeleton**
+    - Implemented `chromiumoxide` background process (`browser.rs`).
+    - Implemented Basic "Fetch and Search" command (`fetch_and_search`).
+    - Added `radkit` and other dependencies to `Cargo.toml`.
 
 ## Instructions for Next Agent
-Your goal is to continue Phase 1 of the Roadmap.
+Your goal is to start Phase 2 of the Roadmap: The Sifter (Intelligence).
 
 ### Tasks
-1. **Implement `chromiumoxide` background process:**
-   - Add `chromiumoxide` to `nexus/src-tauri/Cargo.toml`.
-   - Create a Rust module to manage the headless browser instance.
-   - Ensure it can run in the background.
+1. **Integrate `html-to-markdown-rs`:**
+   - Add the dependency.
+   - Convert fetched HTML content to Markdown before processing/searching to reduce tokens.
 
-2. **Basic "Fetch and Search" command:**
-   - Implement a Tauri command that takes a URL and a search query.
-   - Use `reqwest` (or `chromiumoxide` navigation) to fetch the page.
-   - Use `grep` crate (or similar text search) to find occurrences.
-   - Return results to the frontend.
+2. **Connect `radkit`:**
+   - Initialize `radkit` with an LLM provider (e.g., Anthropic or OpenAI).
+   - Implement the "Reason + Act" loop using `radkit`.
+   - Create a simple agent that can decide to search or navigate based on user input.
+
+3. **Build "Thought Stream" UI:**
+   - Create a frontend component to display the agent's reasoning logs (Events).
+   - Connect backend events to the frontend.
 
 ### Radkit Integration
-**Important:** Use `radkit` for all agentic logic. The PRD mentions `rig-core`, but we are using `radkit` instead.
+**Important:** Use `radkit` for all agentic logic.
 - Reference `radkit_docs/` for implementation details.
 - See `radkit_docs/core-concepts` for Thread, Event, and Content models.
-- When you reach Phase 2 (The Sifter/Intelligence), use `radkit`'s `LlmWorker` or `LlmFunction` to implement the agent loop.
+- Use `radkit`'s `LlmWorker` or `LlmFunction` to implement the agent loop.
 
 ## Documentation
 - **PRD:** See `PRD.md` for full requirements.
