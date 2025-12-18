@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project Status
-**Current Phase:** Phase 3 (The Weaver/Synthesis)
+**Current Phase:** Phase 4 (The Builder)
 
 ### Completed
 - Initialized Tauri + React + TypeScript project in `nexus/`.
@@ -22,6 +22,10 @@
     - Implemented `Memory` system (`nexus/src-tauri/src/memory.rs`) backed by `GLOBAL_MEMORY`.
     - Added `memorize` and `recall` tools to the agent.
     - Refactored `agent.rs` to support dynamic LLM providers via environment variables.
+    - **Refined Memory**: Upgraded `Memory` to store structured `MemoryEntry` (content, tags, timestamp) and implemented search/filtering in `recall`.
+- **Phase 4: The Builder (Action)** (In Progress)
+    - Improved robustness by adding timeouts to browser operations (`browser.rs`).
+    - Updated agent prompt to encourage error recovery and multi-step reasoning.
 
 ## Configuration (CRITICAL)
 The agent configuration is **strictly** controlled by environment variables. **DO NOT HARDCODE MODELS OR KEYS.**
@@ -34,15 +38,16 @@ The agent configuration is **strictly** controlled by environment variables. **D
 - `LLM_MODEL`: The specific model string (e.g., `claude-3-5-sonnet-20240620`, `gpt-4o`). If not set, reasonable defaults are used.
 
 ## Instructions for Next Agent
-Your goal is to continue Phase 3 and start Phase 4 (The Builder).
+Your goal is to complete Phase 4 and start Phase 5 (The Polisher / Evaluation).
 
 ### Tasks
-1. **Refine Memory**:
-   - The current memory is a simple list of strings (`Vec<String>`). Consider upgrading to a more structured format or vector store if complexity increases.
-   - Implement `synthesize` tool if needed (currently the agent can `recall` and then output a summary, but a dedicated tool might be better for long contexts).
-2. **Phase 4: The Builder (Action)**
-   - Allow the agent to perform more complex multi-step actions autonomously.
-   - Improve error recovery (if a tool fails, retry or try an alternative).
+1. **Phase 4: The Builder (Action)**
+   - **Complex Actions**: Implement more complex browser actions if needed (e.g. file upload, drag & drop, or handling popups).
+   - **Error Recovery**: Continue observing if the timeouts and prompt instructions are sufficient. If not, implement explicit retry logic in tools (e.g. automatic retry on timeout).
+   - **Download/Upload**: Implement tools for downloading files or uploading (if scope permits).
+2. **Phase 5: The Polisher**
+   - **Frontend**: Improve the UI. The "Thought Stream" is functional but could be prettier.
+   - **Evals**: Implement the "Agent Evaluation" plan described below.
 
 ### Warnings
 - **DO NOT HARDCODE** model names or providers in the code. Always use `std::env::var`.
