@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod browser;
 pub mod commands;
+pub mod memory;
 pub mod search;
 
 use browser::BrowserManager;
@@ -15,6 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let _ = GLOBAL_APP.set(app.handle().clone());
+            memory::init_memory();
 
             let browser = match tauri::async_runtime::block_on(async {
                 BrowserManager::new().await

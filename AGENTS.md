@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Project Status
-**Current Phase:** Phase 2 (The Sifter/Intelligence)
+**Current Phase:** Phase 3 (The Weaver/Synthesis)
 
 ### Completed
 - Initialized Tauri + React + TypeScript project in `nexus/`.
@@ -14,19 +14,39 @@
     - Added `radkit` and other dependencies to `Cargo.toml`.
 - **Phase 2: The Sifter (Intelligence)**
     - Integrated `html-to-markdown-rs` to convert fetched HTML to Markdown.
-    - Connected `radkit` to implement the "Reason + Act" loop (using `LlmWorker`).
+    - Connected `radkit` to implement the "Reason + Act" loop.
     - Implemented `agent.rs` with `navigate`, `search`, `click`, `type`, and `scroll` tools.
     - Built "Thought Stream" UI (`ThoughtStream.tsx`) to display agent events in real-time.
-    - Refined `BrowserManager` to support stateful browsing (single active tab) and improved error handling.
+    - Refined `BrowserManager` to support stateful browsing.
+- **Phase 3: The Weaver (Synthesis)**
+    - Implemented `Memory` system (`nexus/src-tauri/src/memory.rs`) backed by `GLOBAL_MEMORY`.
+    - Added `memorize` and `recall` tools to the agent.
+    - Refactored `agent.rs` to support dynamic LLM providers via environment variables.
+
+## Configuration (CRITICAL)
+The agent configuration is **strictly** controlled by environment variables. **DO NOT HARDCODE MODELS OR KEYS.**
+
+### Environment Variables
+- `ANTHROPIC_API_KEY`: API Key for Anthropic.
+- `OPENAI_API_KEY`: API Key for OpenAI.
+- `OPENROUTER_API_KEY`: API Key for OpenRouter.
+- `LLM_PROVIDER`: The LLM provider to use. Supported: `anthropic`, `openai`, `openrouter`. Default: `anthropic`.
+- `LLM_MODEL`: The specific model string (e.g., `claude-3-5-sonnet-20240620`, `gpt-4o`). If not set, reasonable defaults are used.
 
 ## Instructions for Next Agent
-Your goal is to start Phase 3 (The Weaver). Focus on information synthesis and memory.
+Your goal is to continue Phase 3 and start Phase 4 (The Builder).
 
 ### Tasks
-1. **Phase 3: The Weaver (Synthesis)**
-   - Implement the ability for the agent to synthesize information from multiple pages.
-   - Create a "Memory" system to store findings across navigations (e.g. `Memory` struct or vector store).
-   - Consider implementing a `synthesize` tool that allows the agent to summarize collected information.
+1. **Refine Memory**:
+   - The current memory is a simple list of strings (`Vec<String>`). Consider upgrading to a more structured format or vector store if complexity increases.
+   - Implement `synthesize` tool if needed (currently the agent can `recall` and then output a summary, but a dedicated tool might be better for long contexts).
+2. **Phase 4: The Builder (Action)**
+   - Allow the agent to perform more complex multi-step actions autonomously.
+   - Improve error recovery (if a tool fails, retry or try an alternative).
+
+### Warnings
+- **DO NOT HARDCODE** model names or providers in the code. Always use `std::env::var`.
+- **Verify** your changes. If you change a tool signature, update the `JsonSchema` struct.
 
 ## Robust Testing Strategy Plan
 

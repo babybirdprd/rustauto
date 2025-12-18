@@ -72,7 +72,19 @@ impl BrowserManager {
     pub async fn type_text(&self, text: &str) -> Result<String> {
         let guard = self.current_page.lock().await;
         if let Some(page) = guard.as_ref() {
-            page.keyboard().type_str(text).await?;
+            // Try to find the focused element
+            // We use a safe approach: if find_element fails (no focus), we might error or fallback.
+            // But usually there is a body focused if nothing else.
+            match page.find_element(":focus").await {
+                Ok(element) => {
+                    element.type_str(text).await?;
+                },
+                Err(_) => {
+                    // Fallback: try to type in body or just error
+                    // For now, let's error explaining we couldn't find focused element
+                    return Err(anyhow::anyhow!("Could not find focused element to type into."));
+                }
+            }
             Ok(page.content().await?)
         } else {
              Err(anyhow::anyhow!("No active page. Navigate to a URL first."))
