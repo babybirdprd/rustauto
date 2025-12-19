@@ -26,6 +26,8 @@
 - **Phase 4: The Builder (Action)** (In Progress)
     - Improved robustness by adding timeouts to browser operations (`browser.rs`).
     - Updated agent prompt to encourage error recovery and multi-step reasoning.
+    - **Robustness**: Implemented polling mechanism (`wait_for_selector`) in `BrowserManager` to handle dynamic content loading.
+    - **New Capability**: Implemented `upload` tool using `SetFileInputFilesParams` (CDP).
 
 ## Configuration (CRITICAL)
 The agent configuration is **strictly** controlled by environment variables. **DO NOT HARDCODE MODELS OR KEYS.**
