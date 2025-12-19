@@ -41,6 +41,12 @@ struct ScrollArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+struct UploadArgs {
+    selector: String,
+    file_path: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
 struct MemorizeArgs {
     note: String,
     tags: Option<Vec<String>>,
@@ -208,6 +214,30 @@ async fn scroll(args: ScrollArgs) -> ToolResult {
     }
 }
 
+#[tool(description = "Upload a file to an input element. selector must point to an input[type='file'].")]
+async fn upload(args: UploadArgs) -> ToolResult {
+    emit_event("tool_call", format!("Uploading {} to {}", args.file_path, args.selector));
+
+    let browser = match GLOBAL_BROWSER.get() {
+        Some(b) => b,
+        None => return ToolResult::error("Browser not initialized"),
+    };
+
+    match browser.upload_file(&args.selector, &args.file_path).await {
+        Ok(html) => {
+            let content = process_content(html);
+            emit_event("tool_result", format!("Uploaded file. Content length: {}", content.len()));
+            ToolResult::success(json!({
+                "content": content
+            }))
+        },
+        Err(e) => {
+            emit_event("error", format!("Failed to upload: {}", e));
+            ToolResult::error(e.to_string())
+        }
+    }
+}
+
 #[tool(description = "Store a note or finding in the agent's memory for later recall.")]
 async fn memorize(args: MemorizeArgs) -> ToolResult {
     emit_event("tool_call", format!("Memorizing note: {}", args.note));
@@ -255,6 +285,7 @@ CRITICAL INSTRUCTIONS:
         .with_tool(click)
         .with_tool(type_input)
         .with_tool(scroll)
+        .with_tool(upload)
         .with_tool(memorize)
         .with_tool(recall)
         .build();

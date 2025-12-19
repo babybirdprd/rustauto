@@ -1,10 +1,11 @@
 use anyhow::Result;
 use chromiumoxide::{Browser, BrowserConfig, Page};
+use chromiumoxide::cdp::browser_protocol::dom::SetFileInputFilesParams;
 use futures::StreamExt;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex;
-use tokio::time::{timeout, Duration};
+use tokio::time::{timeout, Duration, sleep};
 
 pub static GLOBAL_BROWSER: OnceLock<BrowserManager> = OnceLock::new();
 
@@ -36,6 +37,23 @@ impl BrowserManager {
             browser: Arc::new(browser),
             current_page: Arc::new(Mutex::new(None)),
         })
+    }
+
+    async fn wait_for_selector(page: &Page, selector: &str) -> Result<chromiumoxide::Element> {
+        let start = std::time::Instant::now();
+        let wait_timeout = Duration::from_secs(5);
+
+        loop {
+            match page.find_element(selector).await {
+                Ok(element) => return Ok(element),
+                Err(_) => {
+                    if start.elapsed() > wait_timeout {
+                         return Err(anyhow::anyhow!("Element '{}' not found after 5 seconds", selector));
+                    }
+                    sleep(Duration::from_millis(200)).await;
+                }
+            }
+        }
     }
 
     pub async fn navigate_and_get_content(&self, url: &str) -> Result<String> {
@@ -73,7 +91,7 @@ impl BrowserManager {
             let page_clone = page.clone();
 
             let result = timeout(timeout_duration, async move {
-                 let element = page_clone.find_element(&selector).await?;
+                 let element = Self::wait_for_selector(&page_clone, &selector).await?;
                  element.click().await?;
                  let content = page_clone.content().await?;
                  Ok::<_, anyhow::Error>(content)
@@ -96,6 +114,8 @@ impl BrowserManager {
              let page_clone = page.clone();
 
              let result = timeout(timeout_duration, async move {
+                // For typing, we usually type into the focused element or we should accept a selector.
+                // The current implementation finds ":focus".
                 match page_clone.find_element(":focus").await {
                     Ok(element) => {
                         element.type_str(&text).await?;
@@ -111,6 +131,36 @@ impl BrowserManager {
              match result {
                 Ok(r) => r,
                 Err(_) => Err(anyhow::anyhow!("Type action timed out after 30 seconds")),
+             }
+        } else {
+             Err(anyhow::anyhow!("No active page. Navigate to a URL first."))
+        }
+    }
+
+    pub async fn upload_file(&self, selector: &str, file_path: &str) -> Result<String> {
+        let guard = self.current_page.lock().await;
+        if let Some(page) = guard.as_ref() {
+             let timeout_duration = Duration::from_secs(30);
+             let selector = selector.to_string();
+             let file_path = file_path.to_string();
+             let page_clone = page.clone();
+
+             let result = timeout(timeout_duration, async move {
+                 let element = Self::wait_for_selector(&page_clone, &selector).await?;
+                 // We use CDP directly since set_input_files helper is missing
+                 page_clone.execute(SetFileInputFilesParams::builder()
+                    .files(vec![file_path])
+                    .node_id(element.node_id)
+                    .build()
+                    .unwrap()
+                 ).await?;
+                 let content = page_clone.content().await?;
+                 Ok::<_, anyhow::Error>(content)
+             }).await;
+
+             match result {
+                Ok(r) => r,
+                Err(e) => Err(anyhow::anyhow!("Upload action failed: {}", e)),
              }
         } else {
              Err(anyhow::anyhow!("No active page. Navigate to a URL first."))
