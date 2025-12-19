@@ -1,5 +1,5 @@
 use radkit::agent::LlmWorker;
-use radkit::models::providers::{AnthropicLlm, OpenAILlm, OpenRouterLlm};
+use radkit::models::providers::{AnthropicLlm, OpenAILlm, OpenRouterLlm, GeminiLlm, GrokLlm, DeepSeekLlm};
 use radkit::models::BaseLlm;
 use radkit::macros::tool;
 use radkit::tools::ToolResult;
@@ -9,6 +9,7 @@ use serde_json::json;
 use crate::browser::GLOBAL_BROWSER;
 use crate::memory::GLOBAL_MEMORY;
 use crate::GLOBAL_APP;
+use crate::config::Config;
 use html_to_markdown_rs::convert;
 use crate::search::search_content;
 use tauri::Emitter;
@@ -117,14 +118,6 @@ async fn search(args: SearchArgs) -> ToolResult {
             Err(e) => return ToolResult::error(e.to_string()),
         }
     } else {
-        // If no URL is provided, we should ideally use the current page content.
-        // However, `search_content` works on string content.
-        // We'd need to fetch current page content from browser if it exposes it.
-        // For now, let's assume the agent uses `navigate` first or provides a URL.
-        // But wait, `navigate` returns content.
-        // If the agent wants to search *again* on the *same* page without reloading?
-        // The BrowserManager maintains state, but `navigate_and_get_content` navigates.
-        // Let's assume for this version URL is preferred or we error.
         return ToolResult::error("URL is required for search in this version. Navigate first if needed.");
     };
 
@@ -274,6 +267,13 @@ async fn run_worker<L: BaseLlm + 'static>(llm: L, prompt: String) -> Result<Stri
     let worker = LlmWorker::<String>::builder(llm)
         .with_system_instructions("You are Nexus, an intelligent browser agent. You can navigate the web, click elements, type text, scroll, search, and manage memory.
 
+GOAL-DIRECTED BEHAVIOR:
+If a user prompt does not include a specific URL, you must take the initiative to find the relevant information. For example:
+- Use a search engine (e.g., Google) to find news, products, or answers.
+- Navigate to known websites (e.g., Hacker News, Amazon, Walmart, Target) to fulfill specific requests.
+- Compare information across multiple sites by navigating between them and using memory.
+- Take your best guess at the user's intent and start by searching or navigating to a likely source.
+
 CRITICAL INSTRUCTIONS:
 1. Explain your reasoning before taking actions using a <thinking> tag.
 2. If a tool fails, analyze the error and try a different approach (e.g., different selector, search query, or URL). Do not give up immediately.
@@ -302,34 +302,64 @@ CRITICAL INSTRUCTIONS:
     }
 }
 
-pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
+pub async fn run_agent_loop(prompt: String, config: Config) -> Result<String, String> {
     emit_event("system", format!("Agent started with prompt: {}", prompt));
 
-    let provider = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "anthropic".to_string());
-    // Default model depends on provider, but we'll let the user specify or fallback to a reasonable default if possible.
-    // However, `from_env` usually takes a model name.
-    let model = std::env::var("LLM_MODEL").ok();
+    let provider = config.provider.to_lowercase();
+    let model_name = config.model.clone();
+    let api_key = config.api_key.clone();
 
-    match provider.to_lowercase().as_str() {
+    // Set environment variable for radkit to pick up if needed, though most providers have from_env
+    // But radkit's from_env usually reads specific env vars.
+    // If we want to use the key from config, we should set the env var temporarily or check if radkit supports direct key passing.
+    // Looking at radkit_docs, it seems to prefer env vars.
+    match provider.as_str() {
+        "anthropic" => std::env::set_var("ANTHROPIC_API_KEY", &api_key),
+        "openai" => std::env::set_var("OPENAI_API_KEY", &api_key),
+        "openrouter" => std::env::set_var("OPENROUTER_API_KEY", &api_key),
+        "gemini" => std::env::set_var("GEMINI_API_KEY", &api_key),
+        "grok" => std::env::set_var("XAI_API_KEY", &api_key),
+        "deepseek" => std::env::set_var("DEEPSEEK_API_KEY", &api_key),
+        _ => {}
+    }
+
+    match provider.as_str() {
         "anthropic" => {
-            let model_name = model.unwrap_or_else(|| "claude-3-sonnet-20240229".to_string());
             emit_event("system", format!("Using Anthropic provider with model: {}", model_name));
             let llm = AnthropicLlm::from_env(model_name).map_err(|e| e.to_string())?;
             run_worker(llm, prompt).await
         },
         "openai" => {
-             let model_name = model.unwrap_or_else(|| "gpt-4o".to_string());
              emit_event("system", format!("Using OpenAI provider with model: {}", model_name));
-             let llm = OpenAILlm::from_env(model_name).map_err(|e| e.to_string())?;
+             let mut llm = OpenAILlm::from_env(model_name).map_err(|e| e.to_string())?;
+             if let Some(base_url) = config.base_url {
+                 if !base_url.is_empty() {
+                     llm = llm.with_base_url(base_url);
+                 }
+             }
              run_worker(llm, prompt).await
         },
         "openrouter" => {
-            let model_name = model.unwrap_or_else(|| "anthropic/claude-3.5-sonnet".to_string());
             emit_event("system", format!("Using OpenRouter provider with model: {}", model_name));
             let llm = OpenRouterLlm::from_env(model_name)
                 .map_err(|e| e.to_string())?
-                .with_site_url("https://nexus.local") // TODO: Configurable
+                .with_site_url("https://nexus.local")
                 .with_app_name("Nexus Agent");
+            run_worker(llm, prompt).await
+        },
+        "gemini" => {
+            emit_event("system", format!("Using Gemini provider with model: {}", model_name));
+            let llm = GeminiLlm::from_env(model_name).map_err(|e| e.to_string())?;
+            run_worker(llm, prompt).await
+        },
+        "grok" => {
+            emit_event("system", format!("Using Grok provider with model: {}", model_name));
+            let llm = GrokLlm::from_env(model_name).map_err(|e| e.to_string())?;
+            run_worker(llm, prompt).await
+        },
+        "deepseek" => {
+            emit_event("system", format!("Using DeepSeek provider with model: {}", model_name));
+            let llm = DeepSeekLlm::from_env(model_name).map_err(|e| e.to_string())?;
             run_worker(llm, prompt).await
         },
         _ => {
@@ -338,4 +368,4 @@ pub async fn run_agent_loop(prompt: String) -> Result<String, String> {
             Err(msg)
         }
     }
-        }
+}

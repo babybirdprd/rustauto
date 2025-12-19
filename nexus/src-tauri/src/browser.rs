@@ -76,10 +76,48 @@ impl BrowserManager {
                     let _ = old_page.close().await;
                 }
                 *guard = Some(page);
+
+                // Emit event for UI update
+                if let Some(app) = crate::GLOBAL_APP.get() {
+                    use serde_json::json;
+                    use tauri::Emitter;
+                    let _ = app.emit("browser-update", json!({
+                        "url": url,
+                    }));
+                }
+
                 Ok(content)
             },
             Ok(Err(e)) => Err(e),
             Err(_) => Err(anyhow::anyhow!("Navigation timed out after 30 seconds")),
+        }
+    }
+
+    pub async fn get_current_url(&self) -> Result<String> {
+        let guard = self.current_page.lock().await;
+        if let Some(page) = guard.as_ref() {
+             let url = page.url().await?.unwrap_or_else(|| "about:blank".to_string());
+             Ok(url)
+        } else {
+            Ok("".to_string())
+        }
+    }
+
+    pub async fn take_screenshot(&self) -> Result<String> {
+        let guard = self.current_page.lock().await;
+        if let Some(page) = guard.as_ref() {
+            // chromiumoxide's screenshot returns Vec<u8>
+            let screenshot_data = page.screenshot(
+                chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotParams::builder()
+                    .format(chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat::Png)
+                    .build()
+            ).await?;
+
+            use base64::{Engine as _, engine::general_purpose};
+            let base64_image = general_purpose::STANDARD.encode(screenshot_data);
+            Ok(format!("data:image/png;base64,{}", base64_image))
+        } else {
+            Err(anyhow::anyhow!("No active page to screenshot"))
         }
     }
 
