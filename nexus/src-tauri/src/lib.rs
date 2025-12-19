@@ -44,7 +44,8 @@ pub fn run() {
             commands::take_screenshot,
             commands::get_current_url,
             commands::get_config,
-            commands::save_config
+            commands::save_config,
+            commands::reset_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -79,3 +79,18 @@ pub fn save_config(
 ) -> Result<(), String> {
     config_manager.lock().unwrap().save(&config)
 }
+
+#[tauri::command]
+pub async fn reset_session(
+    browser: State<'_, crate::browser::BrowserManager>,
+) -> Result<(), String> {
+    if let Some(mem_lock) = GLOBAL_MEMORY.get() {
+        if let Ok(mut mem) = mem_lock.lock() {
+            mem.clear();
+        }
+    }
+
+    browser.reset().await.map_err(|e| e.to_string())?;
+    
+    Ok(())
+}

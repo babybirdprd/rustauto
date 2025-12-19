@@ -227,4 +227,12 @@ impl BrowserManager {
              Err(anyhow::anyhow!("No active page. Navigate to a URL first."))
         }
     }
+
+    pub async fn reset(&self) -> Result<()> {
+        let mut guard = self.current_page.lock().await;
+        if let Some(page) = guard.take() {
+            let _ = page.close().await;
+        }
+        Ok(())
+    }
 }
