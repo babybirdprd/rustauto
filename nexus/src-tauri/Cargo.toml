@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chromiumoxide = { version = "0.8.0", features = ["tokio-runtime"] }
 radkit = "0.0.4"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "process", "macros"] }
 schemars = "1"
 grep = "0.3"
 anyhow = "1"
@@ -32,7 +32,12 @@ thiserror = "1"
 futures = "0.3"
 html-to-markdown-rs = "2.11"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tryparse = { version = "0.4", features = ["derive"] }
 async-trait = "0.1"
 base64 = "0.22"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-log = { version = "2", features = ["colored"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+log = "0.4"

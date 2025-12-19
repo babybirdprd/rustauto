@@ -7,12 +7,16 @@ import { Settings } from "./components/Settings";
 import { MemoryView } from "./components/MemoryView";
 import { ExecutionFlow } from "./components/ExecutionFlow";
 import { ResultPanel } from "./components/ResultPanel";
+import { TraceViewer } from "./components/TraceViewer";
+
+type ActiveView = "main" | "traces";
 
 function App() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [activeView, setActiveView] = useState<ActiveView>("main");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +50,9 @@ function App() {
       <Sidebar
         onNewTask={handleReset}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenTraces={() => setActiveView("traces")}
+        onOpenMain={() => setActiveView("main")}
+        activeView={activeView}
       />
 
       {/* 2. Main Interaction Stage (Center) */}
@@ -67,9 +74,13 @@ function App() {
           </div>
         </header>
 
-        {/* Browser Feed */}
+        {/* Browser Feed or Trace Viewer */}
         <div className="flex-1 p-4 overflow-hidden flex flex-col space-y-4">
-          <BrowserPreview />
+          {activeView === "main" ? (
+            <BrowserPreview />
+          ) : (
+            <TraceViewer />
+          )}
         </div>
 
         {/* Omnibox / Input */}
